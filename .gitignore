@@ -1,0 +1,8 @@
+data/
+real_data/
+report_latex/
+wound_report_overleaf.zip
+paper.txt
+wound_cv/make_latex.py
+__pycache__/
+*.pyc

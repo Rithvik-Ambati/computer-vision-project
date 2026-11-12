@@ -1,0 +1,45 @@
+photos 2686 | fit 1881 | checkpoint-selection 268 | held-out test 537
+synthetic-only on real: Dice 0.216
+[real_scratch] epoch 01/12 loss 0.4987 sel-val Dice 0.2474 IoU 0.1711 (337s)
+[real_scratch] epoch 02/12 loss 0.4077 sel-val Dice 0.2109 IoU 0.1454 (669s)
+[real_scratch] epoch 03/12 loss 0.3488 sel-val Dice 0.3441 IoU 0.2414 (1146s)
+[real_scratch] epoch 04/12 loss 0.3113 sel-val Dice 0.2882 IoU 0.1987 (1496s)
+[real_scratch] epoch 05/12 loss 0.2834 sel-val Dice 0.3801 IoU 0.2730 (1768s)
+[real_scratch] epoch 06/12 loss 0.2640 sel-val Dice 0.4337 IoU 0.3141 (2102s)
+[real_scratch] epoch 07/12 loss 0.2505 sel-val Dice 0.4413 IoU 0.3219 (2429s)
+[real_scratch] epoch 08/12 loss 0.2413 sel-val Dice 0.4939 IoU 0.3648 (2734s)
+[real_scratch] epoch 09/12 loss 0.2346 sel-val Dice 0.4720 IoU 0.3471 (10451s)
+[real_scratch] epoch 10/12 loss 0.2305 sel-val Dice 0.4794 IoU 0.3536 (10848s)
+[real_scratch] epoch 11/12 loss 0.2274 sel-val Dice 0.4736 IoU 0.3498 (11253s)
+[real_scratch] epoch 12/12 loss 0.2260 sel-val Dice 0.4720 IoU 0.3480 (11653s)
+[real_finetune] epoch 01/8 loss 0.4388 sel-val Dice 0.1497 IoU 0.1047 (369s)
+[real_finetune] epoch 02/8 loss 0.3928 sel-val Dice 0.2502 IoU 0.1751 (764s)
+[real_finetune] epoch 03/8 loss 0.3570 sel-val Dice 0.3573 IoU 0.2553 (1152s)
+[real_finetune] epoch 04/8 loss 0.3346 sel-val Dice 0.3702 IoU 0.2646 (1544s)
+[real_finetune] epoch 05/8 loss 0.3165 sel-val Dice 0.3953 IoU 0.2856 (1932s)
+[real_finetune] epoch 06/8 loss 0.3039 sel-val Dice 0.4078 IoU 0.2973 (2326s)
+[real_finetune] epoch 07/8 loss 0.2962 sel-val Dice 0.4073 IoU 0.2962 (2726s)
+[real_finetune] epoch 08/8 loss 0.2942 sel-val Dice 0.4376 IoU 0.3202 (3121s)
+{
+ "synthetic-only": {
+  "dice": 0.21619053550461761,
+  "iou": 0.1434609254887393,
+  "dice_median": 0.1449814126394052,
+  "area_ratio_median": 0.8106013251656458,
+  "n": 537
+ },
+ "real-scratch": {
+  "dice": 0.4984129972828648,
+  "iou": 0.3653324268098616,
+  "dice_median": 0.5419069999287901,
+  "area_ratio_median": 0.8207088255733148,
+  "n": 537
+ },
+ "synth\u2192real": {
+  "dice": 0.43439822040317505,
+  "iou": 0.31526455262168196,
+  "dice_median": 0.4627207765943104,
+  "area_ratio_median": 0.5843347639484978,
+  "n": 537
+ }
+}

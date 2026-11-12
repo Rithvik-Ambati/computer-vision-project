@@ -1,0 +1,25 @@
+[main]
+  fig 03_ablation.png
+  fig 04_agreement.png
+  fig 05_segmentation.png
+  fig 06_perimeter.png
+[sweeps]
+  fig 07_sweep_tilt.png
+  fig 08_sweep_distance.png
+  fig 09_sweep_curvature.png
+  fig 10_sweep_lighting.png
+[repeat]
+  fig 11_repeatability.png
+[healing]
+  fig 12_healing.png
+   healing ΔA MAE (pp): {'full': 4.840024718366476, 'pixel': 12.870227443315805}
+[registration]
+  fig 13_registration.png
+[flow]
+  fig 14_optical_flow.png
+[worked examples]
+  fig 16_worked_example_A.png
+  fig 16_worked_example_B.png
+  fig 16_worked_example_C.png
+[train curves]
+  fig 15_training_curves.png
