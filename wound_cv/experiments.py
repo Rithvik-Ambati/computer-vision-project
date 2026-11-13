@@ -114,7 +114,7 @@ def stage_calib():
     ax[0].imshow(rgb(vis)); ax[0].set_title("1. Detect checkerboard corners"); ax[0].axis("off")
     ax[1].bar(range(len(c["per_view"])), c["per_view"], color="#3b7dd8")
     ax[1].axhline(c["rms"], color="k", ls="--", lw=1); ax[1].set_xlabel("calibration view"); ax[1].set_ylabel("reprojection RMS (px)")
-    ax[1].set_title(f"2. Reprojection error  (overall RMS {c['rms']:.2f} px)")
+    ax[1].set_title(f"2. Reprojection error\n(overall RMS {c['rms']:.2f} px)")
     # undistortion grid demo
     g = np.full((sim.IMG, sim.IMG, 3), 255, np.uint8)
     for t in range(0, sim.IMG, 16):
@@ -125,7 +125,7 @@ def stage_calib():
     ax[2].imshow(warped); ax[2].axis("off"); ax[2].set_title("3. Barrel distortion this lens produces\n(grid straight → curved)")
     txt = (f"focal length  f = {K[0, 0]:.1f} px  (true {sim.F_PX:.0f})\nk1 = {d[0]:.3f}  (true {sim.K1_TRUE:.2f})\n"
            f"views used {c['n_used']}/{c['n_views']}")
-    fig.text(0.5, -0.03, txt, ha="center", fontsize=9, family="monospace")
+    fig.text(0.5, -0.16, txt, ha="center", fontsize=9, family="monospace")
     save(fig, "01_calibration.png")
     json.dump(dict(f=float(K[0, 0]), cx=float(K[0, 2]), cy=float(K[1, 2]), k1=float(d[0]), rms=c["rms"],
                    f_true=sim.F_PX, k1_true=sim.K1_TRUE, used=c["n_used"]), open(os.path.join(RES, "calibration.json"), "w"), indent=1)
