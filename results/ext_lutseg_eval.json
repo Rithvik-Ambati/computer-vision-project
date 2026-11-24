@@ -1,0 +1,32 @@
+{
+ "real_scratch": {
+  "dice_mean": 0.6297954362300491,
+  "dice_median": 0.6878306878306878,
+  "iou_mean": 0.48719346186736195,
+  "n_comparisons": 102,
+  "corr_dA": 0.2702943467785009,
+  "mae_dA_pp": 49.25992762857299,
+  "verdict_agreement_last_visit": 66.66666666666666,
+  "n_patients": 39
+ },
+ "real_finetune": {
+  "dice_mean": 0.5875865813864624,
+  "dice_median": 0.654065934065934,
+  "iou_mean": 0.4469487253805266,
+  "n_comparisons": 102,
+  "corr_dA": 0.45881783522302955,
+  "mae_dA_pp": 49.46896167574578,
+  "verdict_agreement_last_visit": 61.53846153846154,
+  "n_patients": 39
+ },
+ "unet_bce": {
+  "dice_mean": 0.30644225187386154,
+  "dice_median": 0.23560830860534124,
+  "iou_mean": 0.21582931876427536,
+  "n_comparisons": 102,
+  "corr_dA": -0.014848527709193206,
+  "mae_dA_pp": 4471.480796171586,
+  "verdict_agreement_last_visit": 48.717948717948715,
+  "n_patients": 39
+ }
+}

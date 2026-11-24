@@ -6,6 +6,7 @@
 
 Tab 1  Simulated wound   : sliders -> renders a photo with EXACT true area, measures it by every method, interval + flags
 Tab 2  Real wound photo  : upload a real photo -> U-Net outline (+ Dice if a clinician mask is known)
+Tab 4  Healing           : 3-6 real follow-up photos of one wound (LUTSeg style) -> relative size trend + verdict
 Tab 3  Photo with marker : upload a photo that contains the 40 mm ArUco marker
                            (a) printed target page photographed with a real camera, or (b) a simulated wound photo
 """
@@ -151,60 +152,75 @@ def tab_marker(img_rgb, source, radius):
     return bgr2rgb(big), bar_plot(modes), summary_md(modes, None, None, interval, flags, "red = U-Net outline · green = detected marker. The true area of an uploaded photo is not known to the app; for the supplied example photos it is written in the file name (e.g. `true907`).")
 
 
-def tab_visits_real(files, truth_text):
-    """Real-camera visit photos of the printed pages (no simulation): marker homography + red wound -> area per visit -> verdict."""
+_LUT_CACHE = {}
+
+
+def _lut_model(path):
+    """Fine-tuned LUTSeg model. A photo from a known LUTSeg patient is scored by the fold model that never trained on that patient."""
+    m = re.search(r"P(\d+)_?T", os.path.basename(path)) or re.search(r"Patient_(\d+)", path.replace("\\", "/"))
+    tag = "lutseg_all"
+    if m:
+        fl = json.load(open(os.path.join(ROOT, "results", "ext_lutseg_folds.json")))["folds"]
+        for k, g in enumerate(fl):
+            if f"Patient_{m.group(1)}" in g: tag = f"lutseg_fold{k}"
+    if tag not in _LUT_CACHE: _LUT_CACHE[tag] = S.load_model(tag)
+    return tag, _LUT_CACHE[tag]
+
+
+def _mask_lookup():
+    if "mask" not in _LUT_CACHE:
+        from . import lutseg as L
+        _LUT_CACHE["mask"] = {os.path.basename(r["image"]): r["mask"] for _, r in L.load_index().iterrows()} if os.path.isdir(L.DATA) else {}
+    return _LUT_CACHE["mask"]
+
+
+def _visit_no(p):
+    m = re.search(r"T_?(\d+)\.", os.path.basename(p))
+    return (int(m.group(1)) if m else 0, os.path.basename(p))
+
+
+def tab_visits_real(files):
+    """Real follow-up photos of one wound (no simulation, no scale marker): outline each photo, follow the RELATIVE size, give a verdict."""
+    from . import lutseg as L
     paths = [getattr(f, "name", f) for f in (files or [])]
-    if len(paths) < 2:
-        return None, None, "Upload at least 2 photos (one per visit, in visit order: file names are sorted)."
-    paths = sorted(paths, key=os.path.basename)
-    res = [D.measure_visit_photo(cv2.imread(p)) for p in paths]
-    labels = [f"visit {i + 1}" for i in range(len(paths))]
-    area = np.array([r["area"] for r in res])
-    gal = []
-    for r, lab in zip(res, labels):
-        o = cv2.cvtColor(r["img"], cv2.COLOR_BGR2RGB).copy()
-        if r["corners"] is not None:
-            cv2.polylines(o, [r["corners"].astype(np.int32)], True, (0, 255, 0), max(2, o.shape[1] // 300))
-        if r["mask"] is not None:
-            cs, _ = cv2.findContours(r["mask"], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE); cv2.drawContours(o, cs, -1, (255, 255, 0), max(2, o.shape[1] // 300))
-        gal.append((o, f"{lab}: " + (f"{r['area']:.0f} mm2" if np.isfinite(r["area"]) else "marker or wound not found")))
-    if not np.isfinite(area[0]):
-        return gal, None, "The marker (or the red wound) was not found in the first photo, so the starting area is unknown. Make sure the black marker is fully visible and in focus."
-    truth = None
-    try:
-        t = [float(x) for x in re.split(r"[,\s;]+", (truth_text or "").strip()) if x]
-        truth = np.array(t) if len(t) == len(paths) else None
-    except ValueError:
-        truth = None
-    dA = (area[0] - area) / area[0] * 100
-    fig, ax = plt.subplots(1, 3, figsize=(15, 4)); x = np.arange(len(paths)); cmap = plt.cm.viridis(np.linspace(0, .9, len(paths)))
-    if truth is not None:
-        ax[0].plot(x, truth, "k-", lw=2, alpha=.5, label="true (printed)")
-    ax[0].plot(x, area, "o--", color=COL["full"], lw=2, label="measured from the photo"); ax[0].set_xticks(x); ax[0].set_xticklabels(labels)
-    ax[0].set_ylabel("wound area (mm²)"); ax[0].set_title("Area at each visit"); ax[0].legend(fontsize=8)
+    if len(paths) < 3:
+        return None, None, "Upload at least 3 real photos of the same wound (visits in time order; files named ...T1, T2, ... are sorted by visit number)."
+    paths = sorted(paths, key=_visit_no); n = len(paths)
+    gal, frac, gtf, shapes = [], [], [], set()
+    for i, p in enumerate(paths):
+        im = cv2.imread(p); shapes.add(im.shape[:2]); tag, model = _lut_model(p)
+        x = cv2.resize(im, (sim.IMG, sim.IMG), interpolation=cv2.INTER_AREA)
+        _, M = S.predict(model, x[None]); m = M[0]
+        frac.append(float(m.mean() * 100)); o = bgr2rgb(x).copy()
+        cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE); cv2.drawContours(o, cs, -1, (255, 255, 0), 2)
+        cap = f"visit {i + 1}: model {frac[-1]:.1f}% of frame"
+        mp = _mask_lookup().get(os.path.basename(p))
+        if mp and os.path.exists(mp):
+            g = (cv2.imread(mp, cv2.IMREAD_UNCHANGED) > 0).astype(np.uint8)
+            if g.ndim == 3: g = g[..., 0]
+            g = cv2.resize(g, (sim.IMG, sim.IMG), interpolation=cv2.INTER_NEAREST); gtf.append(float(g.mean() * 100))
+            cs, _ = cv2.findContours(g, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE); cv2.drawContours(o, cs, -1, (0, 255, 0), 2)
+            cap += f" · clinician {gtf[-1]:.1f}%"
+        gal.append((o, cap))
+    frac = np.array(frac); gtf = np.array(gtf) if len(gtf) == n else None
+    if frac[0] <= 0: return gal, None, "No wound was found in the first photo."
+    dA = (frac[0] - frac) / frac[0] * 100; x = np.arange(n); labels = [f"visit {i + 1}" for i in range(n)]
+    fig, ax = plt.subplots(1, 2, figsize=(11, 3.8))
+    ax[0].plot(x, frac, "o--", color=COL["full"], lw=2, label="model outline")
+    if gtf is not None: ax[0].plot(x, gtf, "k-", lw=2, alpha=.5, label="clinician outline")
+    ax[0].set_xticks(x); ax[0].set_xticklabels(labels); ax[0].set_ylabel("wound / frame (%)"); ax[0].set_title("Relative wound size"); ax[0].legend(fontsize=8)
     wd = .35
-    if truth is not None:
-        ax[1].bar(x - wd / 2, (truth[0] - truth) / truth[0] * 100, wd, color="#444", label="true")
-    ax[1].bar(x + (wd / 2 if truth is not None else 0), dA, wd, color=COL["full"], label="measured")
-    ax[1].axhline(0, color="k", lw=.8); ax[1].set_xticks(x); ax[1].set_xticklabels(labels); ax[1].set_ylabel("healing ΔA (%)"); ax[1].set_title("Healing progress (+ = smaller than visit 1)"); ax[1].legend(fontsize=8)
-    lo, size, ppm = np.array([40.0, -10.0]), (450, 400), 5
-    ok = [i for i, r in enumerate(res) if r["mask"] is not None]
-    ax[2].imshow(np.full((size[1], size[0], 3), 255, np.uint8), extent=[lo[0], lo[0] + size[0] / ppm, lo[1] + size[1] / ppm, lo[1]])
-    for i in ok:
-        cs = contour_of((to_frame(res[i]["H"], res[i]["mask"].astype(np.float32), lo, size, ppm) > .5).astype(np.uint8))
-        if len(cs):
-            ax[2].plot(cs[:, 0] / ppm + lo[0], cs[:, 1] / ppm + lo[1], color=cmap[i], lw=2, label=labels[i])
-    ax[2].legend(fontsize=7); ax[2].set_title("All visits in ONE metric frame (outlines)"); ax[2].set_xlabel("mm"); ax[2].grid(False); fig.tight_layout()
-    last = max(i for i in range(len(paths)) if np.isfinite(dA[i]))
-    md = [f"### Interpretation: **{D.heal_verdict(dA[last])}** (area change {dA[last]:+.0f} % between visit 1 and visit {last + 1})"]
-    steps = np.diff(area[np.isfinite(area)])
-    md.append(f"Visit-to-visit: {int((steps < 0).sum())} of {len(steps)} steps got smaller, {int((steps > 0).sum())} got larger.")
-    head = "\n| visit | measured area (mm²) | healing ΔA |" + (" true area | error |" if truth is not None else "") + "\n|---|---|---|" + ("---|---|" if truth is not None else "")
-    md.append(head)
-    for i in range(len(paths)):
-        md.append(f"| {i + 1} | {area[i]:.0f} | {dA[i]:+.1f}% |" + (f" {truth[i]:.0f} | {(area[i] - truth[i]) / truth[i] * 100:+.1f}% |" if truth is not None else ""))
-    md.append("\nReal camera, so only the marker homography is used (no lens correction). A change under about ±10 % is inside the measurement error and is called *stalled*. "
-              "The 'true' areas are the printed shapes: they are written at the bottom of each printed page.")
+    if gtf is not None and gtf[0] > 0: ax[1].bar(x - wd / 2, (gtf[0] - gtf) / gtf[0] * 100, wd, color="#444", label="clinician")
+    ax[1].bar(x + (wd / 2 if gtf is not None else 0), dA, wd, color=COL["full"], label="model")
+    ax[1].axhline(0, color="k", lw=.8); ax[1].set_xticks(x); ax[1].set_xticklabels(labels); ax[1].set_title("Change vs visit 1 (+ = smaller)"); ax[1].legend(fontsize=8); fig.tight_layout()
+    md = [f"### Interpretation: **{L.verdict(dA[-1])}** (relative size change {dA[-1]:+.0f} % between visit 1 and visit {n})"]
+    st = np.diff(frac); md.append(f"Visit-to-visit: {int((st < 0).sum())} of {len(st)} steps got smaller, {int((st > 0).sum())} got larger.")
+    if gtf is not None and gtf[0] > 0:
+        dg = (gtf[0] - gtf[-1]) / gtf[0] * 100; md.append(f"Clinician outlines say: **{L.verdict(dg)}** ({dg:+.0f} %). " + ("The model agrees." if L.verdict(dg) == L.verdict(dA[-1]) else "**The model disagrees here.**"))
+    if len(shapes) > 1: md.append("**Warning: the photos have different sizes/crops, so wound-as-fraction-of-frame is not comparable. Treat the verdict as unreliable.**")
+    md.append("\nThere is **no scale marker** in these photos, so only the size relative to the frame is available (not mm²), and it is valid only if the camera distance stayed about the same. "
+              "A change under ±10 % is called *stalled*. Yellow = model outline, green = clinician outline. Real smartphone photos of leprosy ulcers (LUTSeg, CC BY 4.0). "
+              "Photos of patients in the dataset are scored by a model fold that never trained on that patient.")
     return gal, fig, "\n".join(md)
 
 
@@ -247,17 +263,16 @@ def build():
                 with gr.Column():
                     im3 = gr.Image(label="result"); pl3 = gr.Plot(); md3 = gr.Markdown()
             b4.click(tab_marker, [up3, src, rad3], [im3, pl3, md3])
-        with gr.Tab("4 · Healing over visits"):
-            gr.Markdown("Is the wound healing? Upload **your own phone photos of the printed visit pages** (one photo per visit, in visit order, each from a **different angle**). "
-                        "The 40 mm marker puts every visit on the same millimetre scale, so the areas can be compared.  ΔA = (A₀ − Aₜ)/A₀ × 100 %.  No simulation: real camera, real print.")
+        with gr.Tab("4 · Healing over visits (real photos)"):
+            gr.Markdown("Is the wound healing? Upload **3-6 real photos of the same wound taken at different visits** (time order; `..._T1, _T2, ...` names are sorted automatically). "
+                        "The model outlines the wound in each photo and follows its size relative to the frame. No simulation, no printed pages.")
             with gr.Row():
                 with gr.Column(scale=1):
-                    hup = gr.File(file_count="multiple", file_types=["image"], label="visit photos (2–6, in visit order)")
-                    htruth = gr.Textbox(label="optional: true printed areas, comma-separated (shown at the bottom of each page)", placeholder="900, 650, 420, 230")
+                    hup = gr.File(file_count="multiple", file_types=["image"], label="visit photos (3-6)")
                     h3 = gr.Button("Interpret the visits", variant="primary")
                 with gr.Column(scale=3):
-                    hmd = gr.Markdown(); hgal = gr.Gallery(label="visits (yellow = detected wound, green = marker)", columns=4, height=300); hpl = gr.Plot()
-            h3.click(tab_visits_real, [hup, htruth], [hgal, hpl, hmd])
+                    hmd = gr.Markdown(); hgal = gr.Gallery(label="visits (yellow = model, green = clinician)", columns=4, height=300); hpl = gr.Plot()
+            h3.click(tab_visits_real, [hup], [hgal, hpl, hmd])
     return demo
 
 

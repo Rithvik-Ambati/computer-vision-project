@@ -52,11 +52,19 @@ python -m wound_cv.demo_app                 # window with 3 tabs: simulated phot
 python -m wound_cv.demo_app --selftest      # headless check of every demo path
 python make_demo_set.py                     # ranks the held-out real test photos by Dice into real_data/demo_candidates/
 python make_upload_set.py                   # builds demo_upload/ (real photos, simulated marker photos, printed-target stand-ins)
-python -c "from wound_cv import demo_app as D; D.make_visit_pages('demo_upload/healing_pages')"   # printable visit pages (healing / stalled / worsening, 4 visits each)
-python -m wound_cv.gradio_app [--share]     # browser version; tab 4 = healing over visits (upload your phone photos of the printed visit pages)
+python -m wound_cv.gradio_app [--share]     # browser version; tab 4 = healing over visits (3-6 REAL follow-up photos of one wound -> relative-size trend + verdict)
 ```
 Real-camera caveat: the lens calibration is of the *simulated* camera, so the printed-target tab uses the marker homography only.
 
 ## GPU
 `segment.py` uses CUDA automatically when `torch.cuda.is_available()`. On Windows this needs a recent NVIDIA driver and a CUDA build of PyTorch
 (see pytorch.org); check with `python -c "import torch; print(torch.cuda.is_available())"`.
+
+### Real follow-up photos (LUTSeg, CC BY 4.0, not in the repo)
+Download LUTSeg into `data/LUTSeg/` (141 smartphone photos, 39 patients, visits T1..Tn, clinician masks), then:
+```
+python -m wound_cv.lutseg eval        # zero-shot scores + relative-size trend vs clinicians
+python -m wound_cv.lutseg_cv train    # patient-level 5-fold fine-tune (models/lutseg_fold*.pt, lutseg_all.pt)
+python -m wound_cv.lutseg_cv eval     # out-of-fold Dice and verdict agreement on same-framing sequences
+```
+There is no scale marker in these photos, so only size relative to the frame is available, valid only for a constant camera distance.
