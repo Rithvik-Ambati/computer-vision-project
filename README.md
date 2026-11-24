@@ -51,6 +51,9 @@ python -m wound_cv.demo_app --make-target   # writes demo_target.png: marker + p
 python -m wound_cv.demo_app                 # window with 3 tabs: simulated photo (exact truth), real photo (outline), printed target
 python -m wound_cv.demo_app --selftest      # headless check of every demo path
 python make_demo_set.py                     # ranks the held-out real test photos by Dice into real_data/demo_candidates/
+python make_upload_set.py                   # builds demo_upload/ (real photos, simulated marker photos, printed-target stand-ins)
+python make_healing_set.py                  # builds demo_upload/healing_visits/ (healing / stalled / worsening, 6 visits each)
+python -m wound_cv.gradio_app [--share]     # browser version; tab 4 = healing over visits (simulate or upload visits)
 ```
 Real-camera caveat: the lens calibration is of the *simulated* camera, so the printed-target tab uses the marker homography only.
 

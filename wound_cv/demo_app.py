@@ -170,6 +170,46 @@ def annotate_sim(res):
     return big
 
 
+# ----------------------------------------------------------------------------- healing follow-up backend
+DAYS = [0, 7, 14, 21, 28, 35]
+HEAL_TRENDS = {"healing (area falls to ~17 % of the start)": [1, .78, .58, .42, .28, .17],
+               "stalled (no real change)": [1, 1.01, .98, 1.0, .99, 1.0],
+               "worsening (area grows to ~1.4x)": [1, 1.07, 1.15, 1.25, 1.33, 1.42]}
+
+
+def heal_verdict(dA_last, tol=10.0):
+    """Plain-language call from the last-visit healing percentage (threshold = about twice the 4.8 pp error measured)."""
+    return "HEALING" if dA_last > tol else ("WORSENING" if dA_last < -tol else "STALLED / no clear change")
+
+
+def run_healing(trend, seed):
+    """Simulate one patient followed over 6 visits (a new random camera pose each visit) and measure every visit."""
+    rng = np.random.default_rng(int(seed))
+    a0 = float(rng.uniform(500, 1100)); skin = sim.make_skin(int(seed)); wound = sim.Wound(np.random.default_rng(int(seed) + 12345), a0)
+    ratios = np.array(HEAL_TRENDS[trend]) * (1 + rng.normal(0, .02, len(DAYS)))
+    imgs, trues = [], []
+    for rat in ratios:
+        sc = sim.make_scene(int(seed), a0, scale=float(np.sqrt(rat)), healing=float(np.clip(1 - rat, 0, 1)), skin=skin, wound=wound)
+        img, m, _, a = sim.render(sc, sim.random_cam(rng, tilt_max=35)); imgs.append(img); trues.append(a)
+    return measure_visits(imgs, trues=trues)
+
+
+def measure_visits(imgs, trues=None):
+    """imgs: BGR 256x256 photos in visit order (each with the marker).  Returns areas, healing % and overlay data."""
+    cal = calib_cached()
+    P, M = S.predict(model_cached("unet_bce"), np.stack(imgs))
+    full, pixel, corners = [], [], []
+    for im, m in zip(imgs, M):
+        r = G.pipeline_measure(im, m, cal, "full"); full.append(r["area"] if r["ok"] else np.nan); corners.append(G.detect_marker(im))
+        pixel.append(G.pipeline_measure(im, m, cal, "pixel")["area"])
+    full, pixel = np.array(full), np.array(pixel)
+    dA = lambda v: (v[0] - v) / v[0] * 100 if np.isfinite(v[0]) else np.full(len(v), np.nan)
+    out = dict(imgs=imgs, masks=M, full=full, pixel=pixel, dA_full=dA(full), dA_pixel=dA(pixel), corners=corners)
+    if trues is not None:
+        out["true"] = np.array(trues); out["dA_true"] = dA(np.array(trues))
+    return out
+
+
 # ----------------------------------------------------------------------------- real tab backend
 def run_real(path, tag):
     img = cv2.imread(path)

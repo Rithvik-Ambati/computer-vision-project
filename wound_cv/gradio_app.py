@@ -20,6 +20,7 @@ import gradio as gr
 from . import sim, geometry as G, segment as S, curvature as CV, demo_app as D
 from .experiments import ROOT, MODE_NAME
 from .extensions import mc_samples, tta4, est_tilt
+from .experiments import to_frame, contour_of
 
 COL = {"pixel": "#8a8a8a", "scale": "#e08a1e", "homog": "#3b7dd8", "full": "#1f9d6b", "cyl": "#7a4fd6"}
 LABEL = dict(MODE_NAME, cyl="Curvature-aware (radius given)")
@@ -150,8 +151,72 @@ def tab_marker(img_rgb, source, radius):
     return bgr2rgb(big), bar_plot(modes), summary_md(modes, None, None, interval, flags, "red = U-Net outline · green = detected marker. The true area of an uploaded photo is not known to the app; for the supplied example photos it is written in the file name (e.g. `true907`).")
 
 
+# ---------------------------------------------------------------- tab 4 (healing)
+def heal_outputs(r, labels):
+    """Gallery of annotated visits + curves/bars/overlay figure + verdict text for a measure_visits() result."""
+    n = len(r["imgs"]); K, dist = D.calib_cached()["K"], D.calib_cached()["dist"]
+    gal = []
+    for t in range(n):
+        o = cv2.resize(cv2.cvtColor(r["imgs"][t], cv2.COLOR_BGR2RGB), None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        cs, _ = cv2.findContours(cv2.resize(r["masks"][t], None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        cv2.drawContours(o, cs, -1, (255, 255, 0), 2)
+        if r["corners"][t] is not None:
+            cv2.polylines(o, [(r["corners"][t] * 2).astype(np.int32)], True, (0, 255, 0), 2)
+        gal.append((o, f"{labels[t]}: {r['full'][t]:.0f} mm2" + (f" (true {r['true'][t]:.0f})" if "true" in r else "")))
+    fig, ax = plt.subplots(1, 3, figsize=(15, 4))
+    x = np.arange(n); cmap = plt.cm.viridis(np.linspace(0, .9, n)); wd = .27
+    if "true" in r:
+        ax[0].plot(x, r["true"], "k-", lw=2, alpha=.5, label="true")
+    ax[0].plot(x, r["full"], "o--", color=COL["full"], lw=2, label="proposed"); ax[0].plot(x, r["pixel"], "x:", color=COL["pixel"], label="pixels only")
+    ax[0].set_xticks(x); ax[0].set_xticklabels(labels, fontsize=8); ax[0].set_ylabel("wound area (mm²)"); ax[0].set_title("Area at each visit"); ax[0].legend(fontsize=8)
+    if "dA_true" in r:
+        ax[1].bar(x - wd, r["dA_true"], wd, color="#444", label="true")
+    ax[1].bar(x, r["dA_full"], wd, color=COL["full"], label="proposed"); ax[1].bar(x + wd, r["dA_pixel"], wd, color=COL["pixel"], label="pixels only")
+    ax[1].axhline(0, color="k", lw=.8); ax[1].set_xticks(x); ax[1].set_xticklabels(labels, fontsize=8)
+    ax[1].set_ylabel("healing ΔA (%)"); ax[1].set_title("Healing progress (+ = smaller than at the start)"); ax[1].legend(fontsize=8)
+    lo, size, ppm = np.array([35.0, -62.0]), (450, 425), 5
+    ok0 = [t for t in range(n) if r["corners"][t] is not None]
+    if ok0:
+        Hs = {t: G.homography_to_mm(G.undistort_points(r["corners"][t], K, dist)) for t in ok0}
+        ax[2].imshow(cv2.cvtColor(to_frame(Hs[ok0[0]], cv2.undistort(r["imgs"][ok0[0]], K, dist), lo, size, ppm), cv2.COLOR_BGR2RGB),
+                     extent=[lo[0], lo[0] + size[0] / ppm, lo[1] + size[1] / ppm, lo[1]])
+        for t in ok0:
+            cs = contour_of((to_frame(Hs[t], G.undistort_mask(r["masks"][t], K, dist).astype(np.float32), lo, size, ppm) > .5).astype(np.uint8))
+            if len(cs):
+                ax[2].plot(cs[:, 0] / ppm + lo[0], cs[:, 1] / ppm + lo[1], color=cmap[t], lw=2, label=labels[t])
+        ax[2].legend(fontsize=7, ncol=2); ax[2].set_title("All visits in ONE metric frame (outlines)"); ax[2].set_xlabel("mm"); ax[2].grid(False)
+    fig.tight_layout()
+    last = max(i for i in range(n) if np.isfinite(r["dA_full"][i]))
+    md = [f"### Verdict from the proposed method: **{D.heal_verdict(r['dA_full'][last])}** (area change {r['dA_full'][last]:+.0f} % since the first visit)"]
+    if "dA_true" in r:
+        md.append(f"True change: {r['dA_true'][last]:+.0f} % → true verdict **{D.heal_verdict(r['dA_true'][last])}**. Pixels-only would have said {r['dA_pixel'][last]:+.0f} % → {D.heal_verdict(r['dA_pixel'][last])}.")
+    head = "\n| visit | area (mm²) | healing ΔA |" + (" true area | true ΔA |" if "true" in r else "") + "\n|---|---|---|" + ("---|---|" if "true" in r else "")
+    md.append(head)
+    for t in range(n):
+        md.append(f"| {labels[t]} | {r['full'][t]:.0f} | {r['dA_full'][t]:+.1f}% |" + (f" {r['true'][t]:.0f} | {r['dA_true'][t]:+.1f}% |" if "true" in r else ""))
+    md.append("\nA change of less than about ±10 % is inside the method's error (mean healing error 4.8 points in our test), so it is called *stalled*.")
+    return gal, fig, "\n".join(md)
+
+
+def tab_heal_sim(trend, seed, new):
+    seed = int(np.random.randint(1, 10 ** 6)) if new else int(seed)
+    return (*heal_outputs(D.run_healing(trend, seed), [f"day {d}" for d in D.DAYS]), seed)
+
+
+def tab_heal_upload(files):
+    paths = [getattr(f, "name", f) for f in (files or [])]
+    if len(paths) < 2:
+        return None, None, "Upload at least 2 photos (one per visit, each containing the 40 mm marker). They are used in file-name order."
+    paths = sorted(paths, key=os.path.basename)
+    imgs = [cv2.resize(cv2.imread(p), (sim.IMG, sim.IMG), interpolation=cv2.INTER_AREA) for p in paths]
+    r = D.measure_visits(imgs)
+    if not np.isfinite(r["full"][0]):
+        return None, None, "The marker was not found in the first photo, so the starting area is unknown."
+    return heal_outputs(r, [os.path.splitext(os.path.basename(p))[0][:16] for p in paths])
+
+
 def build():
-    tags = [os.path.splitext(os.path.basename(p))[0] for p in sorted(glob.glob(os.path.join(ROOT, "models", "*.pt")))]
+    tags =[os.path.splitext(os.path.basename(p))[0] for p in sorted(glob.glob(os.path.join(ROOT, "models", "*.pt")))]
     with gr.Blocks(title="Wound measurement demo") as demo:
         gr.Markdown("# Geometry-aware wound measurement\nMarker homography + lens calibration + U-Net. Tab 1 and the simulated part of tab 3 use a **simulator with exact ground truth**; real photos (tab 2) have outlines only.")
         with gr.Tab("1 · Simulated wound (exact truth)"):
@@ -189,6 +254,20 @@ def build():
                 with gr.Column():
                     im3 = gr.Image(label="result"); pl3 = gr.Plot(); md3 = gr.Markdown()
             b4.click(tab_marker, [up3, src, rad3], [im3, pl3, md3])
+        with gr.Tab("4 · Healing over visits"):
+            gr.Markdown("Is the wound healing? Each visit is photographed from a **different angle**; the marker homography puts every visit on the same millimetre scale, so the areas can be compared.  ΔA = (A₀ − Aₜ)/A₀ × 100 %.")
+            with gr.Row():
+                with gr.Column(scale=1):
+                    trend = gr.Dropdown(list(D.HEAL_TRENDS), value=list(D.HEAL_TRENDS)[0], label="simulated patient")
+                    hseed = gr.Number(5, label="seed", precision=0)
+                    h1 = gr.Button("Simulate 6 follow-up visits", variant="primary"); h2 = gr.Button("New random patient")
+                    gr.Markdown("**or upload your own visits** (photos with the marker, one per visit, named in order, e.g. the files in `demo_upload/healing_visits/`):")
+                    hup = gr.File(file_count="multiple", file_types=["image"], label="visit photos"); h3 = gr.Button("Measure uploaded visits")
+                with gr.Column(scale=3):
+                    hmd = gr.Markdown(); hgal = gr.Gallery(label="visits (yellow = U-Net outline, green = marker)", columns=3, height=420); hpl = gr.Plot()
+            h1.click(lambda *a: tab_heal_sim(*a, False), [trend, hseed], [hgal, hpl, hmd, hseed])
+            h2.click(lambda *a: tab_heal_sim(*a, True), [trend, hseed], [hgal, hpl, hmd, hseed])
+            h3.click(tab_heal_upload, [hup], [hgal, hpl, hmd])
     return demo
 
 
