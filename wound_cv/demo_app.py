@@ -92,6 +92,55 @@ def measure_target(img):
     return res, out
 
 
+# ----------------------------------------------------------------------------- printed "wound over visits" pages (real camera, no simulation)
+VISIT_SETS = {"healing": [900, 650, 420, 230], "stalled": [900, 880, 915, 895], "worsening": [600, 760, 940, 1180]}   # true areas (mm^2) per visit
+
+
+def make_visit_pages(out_dir):
+    """Writes visit pages <set>_visit<N>.png : the 40 mm marker + ONE red irregular 'wound' whose printed area changes between visits.
+    Print each page at 100 %, photograph it with a phone at a different angle each time, upload the photos in visit order."""
+    os.makedirs(out_dir, exist_ok=True)
+    base = sim.Wound(np.random.default_rng(11), 900.0)
+    truth = {}
+    for name, areas in VISIT_SETS.items():
+        truth[name] = areas
+        for v, a in enumerate(areas, 1):
+            W, H = int(210 * PX_MM), int(297 * PX_MM)
+            page = np.full((H, W, 3), 255, np.uint8)
+            ox, oy = 25.0, 40.0
+            P = lambda x, y: (int(round((ox + x) * PX_MM)), int(round((oy + y) * PX_MM)))
+            m = int(round(sim.MARKER_MM * PX_MM))
+            x0, y0 = P(0, 0)
+            page[y0:y0 + m, x0:x0 + m] = cv2.aruco.generateImageMarker(sim.ARUCO, sim.MARKER_ID, m, borderBits=1)[..., None]
+            pts, area = base.poly(float(np.sqrt(a / 900.0)), 360)
+            cv2.fillPoly(page, [np.array([P(85 + x, 35 + y) for x, y in pts], np.int32)], (30, 30, 215), cv2.LINE_AA)
+            f = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(page, "PRINT AT 100% (no 'fit to page'). The black marker must measure 40 mm.", (int(12 * PX_MM), int(15 * PX_MM)), f, 1.1, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(page, f"{name.upper()} set - VISIT {v} of {len(areas)}", (int(12 * PX_MM), int(24 * PX_MM)), f, 1.3, (0, 0, 0), 3, cv2.LINE_AA)
+            cv2.putText(page, f"printed wound area (true): {area:.0f} mm2", P(0, 120), f, 1.3, (0, 0, 0), 3, cv2.LINE_AA)
+            cv2.imwrite(os.path.join(out_dir, f"{name}_visit{v}.png"), page)
+    json.dump(truth, open(os.path.join(out_dir, "true_areas_mm2.json"), "w"), indent=1)
+
+
+def measure_visit_photo(img):
+    """One real-camera photo of a visit page: marker homography + red-wound segmentation.  Returns dict(area, mask, corners) or None."""
+    h, w = img.shape[:2]
+    if max(h, w) > 1600:
+        s = 1600 / max(h, w); img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+    corners = G.detect_marker(img)
+    if corners is None:
+        return dict(img=img, corners=None, mask=None, area=np.nan)
+    H = G.homography_to_mm(corners)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    red = (((hsv[..., 0] < 10) | (hsv[..., 0] > 168)) & (hsv[..., 1] > 110) & (hsv[..., 2] > 60)).astype(np.uint8)
+    red = cv2.morphologyEx(red, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    n, lab, st, cen = cv2.connectedComponentsWithStats(red, 8)
+    if n <= 1:
+        return dict(img=img, corners=corners, mask=None, area=np.nan)
+    k = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA])); mask = (lab == k).astype(np.uint8)
+    return dict(img=img, corners=corners, mask=mask, area=G.measure(mask, H)["area"], H=H)
+
+
 # ----------------------------------------------------------------------------- simulated tab backend
 _state = {}
 
@@ -170,44 +219,10 @@ def annotate_sim(res):
     return big
 
 
-# ----------------------------------------------------------------------------- healing follow-up backend
-DAYS = [0, 7, 14, 21, 28, 35]
-HEAL_TRENDS = {"healing (area falls to ~17 % of the start)": [1, .78, .58, .42, .28, .17],
-               "stalled (no real change)": [1, 1.01, .98, 1.0, .99, 1.0],
-               "worsening (area grows to ~1.4x)": [1, 1.07, 1.15, 1.25, 1.33, 1.42]}
-
-
+# ----------------------------------------------------------------------------- healing verdict
 def heal_verdict(dA_last, tol=10.0):
     """Plain-language call from the last-visit healing percentage (threshold = about twice the 4.8 pp error measured)."""
     return "HEALING" if dA_last > tol else ("WORSENING" if dA_last < -tol else "STALLED / no clear change")
-
-
-def run_healing(trend, seed):
-    """Simulate one patient followed over 6 visits (a new random camera pose each visit) and measure every visit."""
-    rng = np.random.default_rng(int(seed))
-    a0 = float(rng.uniform(500, 1100)); skin = sim.make_skin(int(seed)); wound = sim.Wound(np.random.default_rng(int(seed) + 12345), a0)
-    ratios = np.array(HEAL_TRENDS[trend]) * (1 + rng.normal(0, .02, len(DAYS)))
-    imgs, trues = [], []
-    for rat in ratios:
-        sc = sim.make_scene(int(seed), a0, scale=float(np.sqrt(rat)), healing=float(np.clip(1 - rat, 0, 1)), skin=skin, wound=wound)
-        img, m, _, a = sim.render(sc, sim.random_cam(rng, tilt_max=35)); imgs.append(img); trues.append(a)
-    return measure_visits(imgs, trues=trues)
-
-
-def measure_visits(imgs, trues=None):
-    """imgs: BGR 256x256 photos in visit order (each with the marker).  Returns areas, healing % and overlay data."""
-    cal = calib_cached()
-    P, M = S.predict(model_cached("unet_bce"), np.stack(imgs))
-    full, pixel, corners = [], [], []
-    for im, m in zip(imgs, M):
-        r = G.pipeline_measure(im, m, cal, "full"); full.append(r["area"] if r["ok"] else np.nan); corners.append(G.detect_marker(im))
-        pixel.append(G.pipeline_measure(im, m, cal, "pixel")["area"])
-    full, pixel = np.array(full), np.array(pixel)
-    dA = lambda v: (v[0] - v) / v[0] * 100 if np.isfinite(v[0]) else np.full(len(v), np.nan)
-    out = dict(imgs=imgs, masks=M, full=full, pixel=pixel, dA_full=dA(full), dA_pixel=dA(pixel), corners=corners)
-    if trues is not None:
-        out["true"] = np.array(trues); out["dA_true"] = dA(np.array(trues))
-    return out
 
 
 # ----------------------------------------------------------------------------- real tab backend
