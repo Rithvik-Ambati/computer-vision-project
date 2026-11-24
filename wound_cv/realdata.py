@@ -49,7 +49,8 @@ def evaluate(model, X, Y):
 def train_real(Xtr, Ytr, Xva, Yva, tag, init=None, epochs=14, lr=2e-4, bs=8, lam=0.0, seed=0):
     torch.manual_seed(seed); np.random.seed(seed)
     model = S.UNet(12)
-    if init: model.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{init}.pt")))
+    if init: model.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{init}.pt"), map_location="cpu"))
+    model.to(S.DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
     xt, yt = S.to_tensor(Xtr), torch.from_numpy(Ytr).float().unsqueeze(1)
@@ -57,7 +58,7 @@ def train_real(Xtr, Ytr, Xva, Yva, tag, init=None, epochs=14, lr=2e-4, bs=8, lam
     for ep in range(epochs):
         model.train(); perm = torch.randperm(len(xt)); tl = 0
         for i in range(0, len(xt), bs):
-            idx = perm[i:i + bs]; x, y = xt[idx], yt[idx]
+            idx = perm[i:i + bs]; x, y = xt[idx].to(S.DEVICE), yt[idx].to(S.DEVICE)
             if np.random.rand() < .5: x, y = x.flip(3), y.flip(3)
             if np.random.rand() < .5: x, y = x.flip(2), y.flip(2)
             k = int(np.random.randint(4)); x, y = torch.rot90(x, k, (2, 3)), torch.rot90(y, k, (2, 3))
@@ -71,7 +72,7 @@ def train_real(Xtr, Ytr, Xva, Yva, tag, init=None, epochs=14, lr=2e-4, bs=8, lam
         if vd > best: best = vd; torch.save(model.state_dict(), os.path.join(ROOT, "models", f"{tag}.pt"))
         print(f"[{tag}] epoch {ep + 1:02d}/{epochs} loss {tl / len(xt):.4f} sel-val Dice {vd:.4f} IoU {vi:.4f} ({time.time() - t0:.0f}s)", flush=True)
     json.dump(hist, open(os.path.join(RES, f"history_{tag}.json"), "w"))
-    model.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{tag}.pt"))); model.eval()
+    model.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{tag}.pt"), map_location=S.DEVICE)); model.eval()
     return model
 
 

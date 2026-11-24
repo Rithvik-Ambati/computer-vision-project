@@ -6,3 +6,6 @@ paper.txt
 wound_cv/make_latex.py
 __pycache__/
 *.pyc
+demo_upload/
+results/gradio_server.log
+.gradio/

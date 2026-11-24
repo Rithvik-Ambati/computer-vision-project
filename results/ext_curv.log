@@ -1,0 +1,84 @@
+[curv]
+   R 10000.0 done
+   R 200 done
+   R 120 done
+   R 80 done
+   R 55 done
+{
+ "10000.0": {
+  "n": 32,
+  "found_default": 32,
+  "found_tolerant": 31,
+  "planar_mape_gt": 4.713087332920207,
+  "cyl_mape_gt": 2.9285941147563594,
+  "planar_mape_net": 7.30842168962302,
+  "planar_bias_net": 5.876896592779245,
+  "cyl_mape_net_R1": 6.129257192140573,
+  "cyl_mape_net_R0.9": 6.150988823059651,
+  "cyl_mape_net_R1.1": 6.111526691048613,
+  "cyl_mape_net_R0.8": 6.17824821473715,
+  "cyl_mape_net_R1.2": 6.096784604805369,
+  "cyl_bias_net_R1": 5.8871879163215235
+ },
+ "200": {
+  "n": 32,
+  "found_default": 32,
+  "found_tolerant": 32,
+  "planar_mape_gt": 13.219179764708606,
+  "cyl_mape_gt": 3.226910221887418,
+  "planar_mape_net": 14.461656379863133,
+  "planar_bias_net": -5.13957305659004,
+  "cyl_mape_net_R1": 7.863756163151453,
+  "cyl_mape_net_R0.9": 9.93328752850971,
+  "cyl_mape_net_R1.1": 6.458425268569032,
+  "cyl_mape_net_R0.8": 13.256292709438874,
+  "cyl_mape_net_R1.2": 5.850777456148791,
+  "cyl_bias_net_R1": 5.092511039623487
+ },
+ "120": {
+  "n": 32,
+  "found_default": 24,
+  "found_tolerant": 30,
+  "planar_mape_gt": 20.287425473429554,
+  "cyl_mape_gt": 3.746030570376163,
+  "planar_mape_net": 19.631413546086083,
+  "planar_bias_net": -8.834666344267337,
+  "cyl_mape_net_R1": 7.195120283223812,
+  "cyl_mape_net_R0.9": 12.925291616141298,
+  "cyl_mape_net_R1.1": 4.860451004428287,
+  "cyl_mape_net_R0.8": 26.488713272540963,
+  "cyl_mape_net_R1.2": 5.092080911641085,
+  "cyl_bias_net_R1": 6.448554037201493
+ },
+ "80": {
+  "n": 32,
+  "found_default": 12,
+  "found_tolerant": 16,
+  "planar_mape_gt": 28.97603620248299,
+  "cyl_mape_gt": 4.080730510015903,
+  "planar_mape_net": 29.320083676338925,
+  "planar_bias_net": -29.320083676338925,
+  "cyl_mape_net_R1": 7.874621591099291,
+  "cyl_mape_net_R0.9": 24.292290664524558,
+  "cyl_mape_net_R1.1": 8.664313112644786,
+  "cyl_mape_net_R0.8": 50.81460760305906,
+  "cyl_mape_net_R1.2": 11.138235949885352,
+  "cyl_bias_net_R1": 3.666067561614163
+ },
+ "55": {
+  "n": 32,
+  "found_default": 2,
+  "found_tolerant": 7,
+  "planar_mape_gt": 52.111747923466496,
+  "cyl_mape_gt": 8.837690682964018,
+  "planar_mape_net": 53.48282044592549,
+  "planar_bias_net": -53.48282044592549,
+  "cyl_mape_net_R1": 6.1655694242467165,
+  "cyl_mape_net_R0.9": 39.896545640627195,
+  "cyl_mape_net_R1.1": 24.52858041111323,
+  "cyl_mape_net_R0.8": 43.39204303795152,
+  "cyl_mape_net_R1.2": 33.547858596675894,
+  "cyl_bias_net_R1": -1.1126448601989396
+ }
+}
+  fig 25_curvature_correction.png

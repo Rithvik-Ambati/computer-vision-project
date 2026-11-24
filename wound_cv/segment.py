@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from . import sim
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")   # GPU is used automatically when a CUDA build of PyTorch is installed
 
 
 class Block(nn.Module):
@@ -86,9 +87,9 @@ def to_tensor(X):
 
 @torch.no_grad()
 def predict(model, X, bs=16, thr=0.5):
-    model.eval(); out = []
+    model.to(DEVICE).eval(); out = []
     for i in range(0, len(X), bs):
-        out.append(torch.sigmoid(model(to_tensor(X[i:i + bs]))).squeeze(1).numpy())
+        out.append(torch.sigmoid(model(to_tensor(X[i:i + bs]).to(DEVICE))).squeeze(1).cpu().numpy())
     P = np.concatenate(out) if out else np.zeros((0, sim.IMG, sim.IMG), np.float32)
     return P, (P > thr).astype(np.uint8)
 
@@ -97,7 +98,7 @@ def train(lam=1.0, epochs=22, n_train=320, n_val=48, bs=8, lr=1e-4, tag="unet", 
     torch.manual_seed(seed); np.random.seed(seed)
     Xtr, Ytr, _ = gen_set(n_train, 1000, cache=os.path.join(ROOT, "data", f"train_{n_train}.npz"))
     Xva, Yva, _ = gen_set(n_val, 2000, cache=os.path.join(ROOT, "data", f"val_{n_val}.npz"))
-    model = UNet(base)
+    model = UNet(base).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
     xt, yt = to_tensor(Xtr), torch.from_numpy(Ytr).float().unsqueeze(1)
@@ -106,10 +107,10 @@ def train(lam=1.0, epochs=22, n_train=320, n_val=48, bs=8, lr=1e-4, tag="unet", 
     for ep in range(epochs):
         model.train(); perm = torch.randperm(len(xt)); tl = 0
         for i in range(0, len(xt), bs):
-            idx = perm[i:i + bs]; x, y = xt[idx], yt[idx]
+            idx = perm[i:i + bs]; x, y = xt[idx].to(DEVICE), yt[idx].to(DEVICE)
             if np.random.rand() < 0.5: x, y = x.flip(3), y.flip(3)
             if np.random.rand() < 0.5: x, y = x.flip(2), y.flip(2)
-            x = (x * (1 + 0.1 * (torch.rand(len(x), 1, 1, 1) - 0.5))).clamp(0, 1)
+            x = (x * (1 + 0.1 * (torch.rand(len(x), 1, 1, 1, device=x.device) - 0.5))).clamp(0, 1)
             loss = combined_loss(model(x), y, lam)
             opt.zero_grad(); loss.backward(); opt.step(); tl += loss.item() * len(idx)
         sched.step()
@@ -125,12 +126,12 @@ def train(lam=1.0, epochs=22, n_train=320, n_val=48, bs=8, lr=1e-4, tag="unet", 
         log(f"[{tag}] epoch {ep + 1:02d}/{epochs} loss {tl / len(xt):.4f} val Dice {vd:.4f} IoU {vi:.4f}  ({time.time() - t0:.0f}s)")
     os.makedirs(os.path.join(ROOT, "results"), exist_ok=True)
     json.dump(hist, open(os.path.join(ROOT, "results", f"history_{tag}.json"), "w"))
-    model.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{tag}.pt")))
+    model.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{tag}.pt"), map_location=DEVICE))
     return model, hist
 
 
 def load_model(tag="unet", base=12):
-    m = UNet(base); m.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{tag}.pt"))); m.eval()
+    m = UNet(base); m.load_state_dict(torch.load(os.path.join(ROOT, "models", f"{tag}.pt"), map_location="cpu")); m.eval()
     return m
 
 

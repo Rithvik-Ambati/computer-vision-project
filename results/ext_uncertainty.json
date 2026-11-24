@@ -1,0 +1,58 @@
+{
+ "n_calibration": 138,
+ "n_test": 137,
+ "alpha_0.1": {
+  "mc_raw": {
+   "coverage": 95.62043795620438,
+   "mean_rel_width": 57.10391710426508
+  },
+  "conformal_global": {
+   "q": 0.14392297899924383,
+   "coverage": 88.32116788321169,
+   "mean_rel_width": 28.784595799848766
+  },
+  "mondrian_small_q": 0.16619679276992666,
+  "mondrian_large_q": 0.13990459365480534,
+  "conformal_mondrian": {
+   "coverage": 88.32116788321169,
+   "mean_rel_width": 28.364746455269408
+  },
+  "conformal_mc_normalised": {
+   "q": 0.8150645135001372,
+   "coverage": 89.05109489051095,
+   "mean_rel_width": 28.293845844097255
+  }
+ },
+ "alpha_0.05": {
+  "mc_raw": {
+   "coverage": 95.62043795620438,
+   "mean_rel_width": 68.038709741252
+  },
+  "conformal_global": {
+   "q": 0.5964314552217739,
+   "coverage": 98.54014598540147,
+   "mean_rel_width": 119.28629104435477
+  },
+  "mondrian_small_q": 0.16619679276992666,
+  "mondrian_large_q": 0.5964314552217739,
+  "conformal_mondrian": {
+   "coverage": 98.54014598540147,
+   "mean_rel_width": 113.00549305235701
+  },
+  "conformal_mc_normalised": {
+   "q": 3.3455016616342825,
+   "coverage": 98.54014598540147,
+   "mean_rel_width": 116.13449821163839
+  }
+ },
+ "flag": {
+  "rule": "estimated tilt > 50 deg OR estimated area < 250 mm2 (marker missing = cannot measure)",
+  "n_flagged": 10,
+  "mape_flagged": 15.560827293828627,
+  "mape_unflagged": 8.558989844190238,
+  "mape_all": 9.070072869711291,
+  "marker_missing": 13,
+  "tilt_est_vs_true_mae": 0.959281887811985
+ },
+ "mc_sd_vs_abs_error_spearman": 0.32254933074467484
+}

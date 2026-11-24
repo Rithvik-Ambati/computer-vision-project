@@ -1,0 +1,26 @@
+[
+ {
+  "name": "rectangle 30 x 20 mm",
+  "area_mm2": 600.0,
+  "centre_mm": [
+   85.0,
+   15.0
+  ]
+ },
+ {
+  "name": "ellipse 30 x 20 mm",
+  "area_mm2": 471.23889803846896,
+  "centre_mm": [
+   85.0,
+   55.0
+  ]
+ },
+ {
+  "name": "irregular blob",
+  "area_mm2": 899.9452713994128,
+  "centre_mm": [
+   30.0,
+   80.0
+  ]
+ }
+]
